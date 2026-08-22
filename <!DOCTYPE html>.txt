@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Face Liveness & PAD — Task Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --void: #0A0F1C;
+    --surface: #131A2B;
+    --surface-hi: #1B2438;
+    --line: #253150;
+    --cyan: #45D8C4;
+    --amber: #F2B84B;
+    --violet: #8A7FE0;
+    --danger: #E0654B;
+    --text: #E9EEF7;
+    --text-muted: #7D8AA6;
+    --text-faint: #4B5772;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--void);
+    background-image:
+      radial-gradient(circle at 15% 0%, rgba(69,216,196,0.09), transparent 42%),
+      radial-gradient(circle at 88% 8%, rgba(242,184,75,0.07), transparent 40%);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  .wrap { max-width: 640px; margin: 0 auto; padding: 0 0 56px; }
+
+  header { padding: 30px 20px 26px; border-bottom: 1px solid var(--line); position: relative; }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; letter-spacing: 0.14em; color: var(--cyan);
+    text-transform: uppercase; margin-bottom: 10px;
+  }
+
+  h1 {
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 27px; font-weight: 700; line-height: 1.15;
+    margin: 0 0 6px; letter-spacing: -0.01em;
+  }
+
+  .subtitle { color: var(--text-muted); font-size: 13.5px; margin-bottom: 24px; }
+
+  .gauge-row { display: flex; align-items: center; gap: 22px; margin-bottom: 18px; }
+
+  .reticle { position: relative; width: 122px; height: 122px; flex-shrink: 0; }
+  .corner { position: absolute; width: 14px; height: 14px; border: 2px solid var(--cyan); opacity: 0.55; }
+  .corner.tl { top: -6px; left: -6px; border-right: none; border-bottom: none; }
+  .corner.tr { top: -6px; right: -6px; border-left: none; border-bottom: none; }
+  .corner.bl { bottom: -6px; left: -6px; border-right: none; border-top: none; }
+  .corner.br { bottom: -6px; right: -6px; border-left: none; border-top: none; }
+
+  .gauge-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .gauge-track { fill: none; stroke: var(--line); stroke-width: 6; }
+  .gauge-fill {
+    fill: none; stroke: var(--amber); stroke-width: 6; stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .gauge-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .gauge-pct { font-family: 'IBM Plex Mono', monospace; font-size: 25px; font-weight: 500; line-height: 1; }
+  .gauge-label { font-size: 9px; letter-spacing: 0.1em; color: var(--text-faint); text-transform: uppercase; margin-top: 4px; }
+
+  .stats { flex: 1; min-width: 0; }
+  .stat-line { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+  .stat-line:last-child { border-bottom: none; }
+  .stat-key { color: var(--text-muted); }
+  .stat-val { font-family: 'IBM Plex Mono', monospace; color: var(--text); text-align: right; }
+
+  .dates {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: var(--text-muted);
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .dates .sep { width: 4px; height: 4px; border-radius: 50%; background: var(--text-faint); flex-shrink: 0; }
+
+  .sync {
+    position: absolute; top: 20px; right: 20px;
+    font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--text-faint);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .sync-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan); }
+  .sync-dot.saving { background: var(--amber); animation: pulse 1s ease-in-out infinite; }
+  .sync-dot.error { background: var(--danger); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; padding: 13px 20px; font-size: 11.5px; color: var(--text-muted); border-bottom: 1px solid var(--line); }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+  .phase { margin: 26px 20px 0; transition: opacity 0.3s ease; }
+  .phase.complete { opacity: 0.55; }
+
+  .phase-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 11px; flex-wrap: wrap; }
+  .phase-num { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--cyan); }
+  .phase-title { font-family: 'Chakra Petch', sans-serif; font-size: 15.5px; font-weight: 600; }
+  .phase-sub { color: var(--text-muted); font-size: 12px; flex: 1; }
+  .phase-count { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-faint); }
+  .phase-check { color: var(--amber); font-size: 13px; }
+
+  .task-list { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+
+  .task-row {
+    display: flex; align-items: flex-start; gap: 12px; padding: 13px 14px;
+    border-bottom: 1px solid var(--line); cursor: pointer;
+    -webkit-tap-highlight-color: transparent; min-height: 44px;
+  }
+  .task-row:last-child { border-bottom: none; }
+  .task-row:active { background: var(--surface-hi); }
+  .task-row:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+
+  .task-check {
+    width: 22px; height: 22px; border: 2px solid var(--line); border-radius: 5px;
+    flex-shrink: 0; position: relative; margin-top: 1px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .task-check.checked { background: var(--amber); border-color: var(--amber); }
+  .task-check.checked::after {
+    content: ''; position: absolute; left: 6px; top: 2px; width: 6px; height: 11px;
+    border: solid var(--void); border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+
+  .task-body { flex: 1; display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+  .task-text { font-size: 13.5px; line-height: 1.45; color: var(--text); }
+  .task-text.done { color: var(--text-faint); text-decoration: line-through; text-decoration-color: var(--text-faint); }
+
+  .tag {
+    font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; font-weight: 500;
+    padding: 2px 6px; border-radius: 4px; flex-shrink: 0; margin-top: 1px; letter-spacing: 0.02em;
+  }
+  .tag-A { background: rgba(69,216,196,0.16); color: var(--cyan); }
+  .tag-B { background: rgba(138,127,224,0.18); color: var(--violet); }
+  .tag-both { background: rgba(255,255,255,0.07); color: var(--text-muted); }
+
+  footer {
+    margin: 36px 20px 0; padding-top: 18px; border-top: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  }
+  .footer-note { font-size: 11px; color: var(--text-muted); line-height: 1.5; max-width: 380px; }
+  .reset-btn {
+    font-family: 'IBM Plex Mono', monospace; font-size: 11px; background: none;
+    border: 1px solid var(--line); color: var(--text-muted); padding: 8px 12px;
+    border-radius: 6px; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  }
+  .reset-btn.confirm { border-color: var(--danger); color: var(--danger); }
+  .reset-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gauge-fill, .phase, .sync-dot { transition: none; animation: none; }
+  }
+
+  @media (max-width: 400px) {
+    h1 { font-size: 23px; }
+    .gauge-row { gap: 14px; }
+    .reticle { width: 100px; height: 100px; }
+    .gauge-pct { font-size: 20px; }
+    .stat-line { font-size: 11.5px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="sync"><span class="sync-dot" id="syncDot"></span><span id="syncText">syncing…</span></div>
+    <div class="eyebrow">MOSIP Decode 2026 · Team Tracker</div>
+    <h1>Face Liveness &amp; PAD</h1>
+    <div class="subtitle">Registration Client — build plan for two</div>
+
+    <div class="gauge-row">
+      <div class="reticle">
+        <span class="corner tl"></span><span class="corner tr"></span>
+        <span class="corner bl"></span><span class="corner br"></span>
+        <svg class="gauge-svg" viewBox="0 0 120 120">
+          <circle class="gauge-track" cx="60" cy="60" r="52"></circle>
+          <circle class="gauge-fill" id="gaugeFill" cx="60" cy="60" r="52" stroke-dasharray="326.7" stroke-dashoffset="326.7"></circle>
+        </svg>
+        <div class="gauge-center">
+          <div class="gauge-pct" id="gaugePct">0%</div>
+          <div class="gauge-label">Verified</div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat-line"><span class="stat-key">Tasks complete</span><span class="stat-val" id="statDone">0 / 34</span></div>
+        <div class="stat-line"><span class="stat-key">Phases complete</span><span class="stat-val" id="statPhases">0 / 6</span></div>
+        <div class="stat-line"><span class="stat-key">Current phase</span><span class="stat-val" id="statCurrent">01</span></div>
+      </div>
+    </div>
+
+    <div class="dates">
+      <span>Registration closes Sep 14</span>
+      <span class="sep"></span>
+      <span>Evaluated in November</span>
+    </div>
+  </header>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot" style="background: var(--cyan)"></span>A — Liveness engine</div>
+    <div class="legend-item"><span class="legend-dot" style="background: var(--violet)"></span>B — Client integration</div>
+    <div class="legend-item"><span class="legend-dot" style="background: rgba(255,255,255,0.3)"></span>Both</div>
+  </div>
+
+  <div id="phaseContainer"></div>
+
+  <footer>
+    <div class="footer-note">Progress is shared — you and your teammate see the same checklist, wherever you open this.</div>
+    <button class="reset-btn" id="resetBtn" type="button">Reset all</button>
+  </footer>
+</div>
+
+<script>
+const PHASES = [
+  {
+    id: 'p0', number: '01', title: 'This Week', subtitle: 'Derisk the hardest unknown',
+    tasks: [
+      { id: 't1', owner: 'both', text: 'Decide liveness/PAD approach — open-source library vs. vendor SDK' },
+      { id: 't2', owner: 'both', text: 'Stand up a mock L0/L1 device for local testing' },
+      { id: 't3', owner: 'B', text: 'Study the existing Registration Client face-capture flow and device-integration framework' },
+    ]
+  },
+  {
+    id: 'p1', number: '02', title: 'Weeks 1–3', subtitle: 'Build in isolation',
+    tasks: [
+      { id: 't4', owner: 'A', text: 'Device abstraction interface' },
+      { id: 't5', owner: 'A', text: 'Face frame streaming interface' },
+      { id: 't6', owner: 'A', text: 'Passive liveness detection + quality/confidence scoring' },
+      { id: 't7', owner: 'A', text: 'Active challenge-response with dynamic challenge selection' },
+      { id: 't8', owner: 'A', text: 'Presentation Attack Detection — photo, screen replay, video replay' },
+      { id: 't9', owner: 'A', text: 'Unit tests against the mock device' },
+      { id: 't10', owner: 'B', text: 'Frame-streaming plumbing into the Registration Client' },
+      { id: 't11', owner: 'B', text: 'Face capture screen UI — live preview, positioning guidance' },
+      { id: 't12', owner: 'B', text: 'Challenge prompt UI' },
+      { id: 't13', owner: 'B', text: 'Failure and retry state UI' },
+      { id: 't14', owner: 'B', text: 'Configuration framework hooks' },
+    ]
+  },
+  {
+    id: 'p2', number: '03', title: 'Weeks 4–5', subtitle: 'Merge into Resident Registration',
+    tasks: [
+      { id: 't15', owner: 'both', text: 'Integrate liveness engine into the Resident Registration workflow' },
+      { id: 't16', owner: 'both', text: 'Passive → active liveness flow works live, end-to-end' },
+      { id: 't17', owner: 'both', text: 'PAD blocks face capture when an attack is detected' },
+      { id: 't18', owner: 'both', text: 'Retry policy enforced' },
+      { id: 't19', owner: 'both', text: 'Full end-to-end demo of Resident Registration' },
+    ]
+  },
+  {
+    id: 'p3', number: '04', title: 'Weeks 6–7', subtitle: 'Operator + Supervisor authentication',
+    tasks: [
+      { id: 't20', owner: 'both', text: 'Integrate liveness into Operator authentication' },
+      { id: 't21', owner: 'both', text: 'Integrate liveness into Supervisor authentication' },
+      { id: 't22', owner: 'both', text: 'Configure liveness policies per workflow' },
+      { id: 't23', owner: 'both', text: 'Verify online/offline handling across all three workflows' },
+    ]
+  },
+  {
+    id: 'p4', number: '05', title: 'Weeks 8–9', subtitle: 'Hardening and polish',
+    tasks: [
+      { id: 't24', owner: 'B', text: 'Error handling — device unavailable, connection failure, camera unavailable' },
+      { id: 't25', owner: 'A', text: 'Error handling — face not detected, multiple faces, poor quality' },
+      { id: 't26', owner: 'A', text: 'Error handling — timeout, max retries, invalid frame data, engine errors' },
+      { id: 't27', owner: 'B', text: 'Audit and diagnostic logging' },
+      { id: 't28', owner: 'both', text: 'Android port — stretch goal only if ahead of schedule' },
+    ]
+  },
+  {
+    id: 'p5', number: '06', title: 'Final Stretch', subtitle: 'Testing, docs, submission',
+    tasks: [
+      { id: 't29', owner: 'both', text: 'Interoperability and performance testing' },
+      { id: 't30', owner: 'both', text: 'ISO/IEC 30107 alignment write-up' },
+      { id: 't31', owner: 'B', text: 'Sequence diagrams' },
+      { id: 't32', owner: 'A', text: 'Technical design document' },
+      { id: 't33', owner: 'both', text: 'Demo recording' },
+      { id: 't34', owner: 'both', text: 'Submission materials finalized' },
+    ]
+  }
+];
+
+const STORAGE_KEY = 'checklist-state';
+let checkedState = {};
+
+function totalTasks() { return PHASES.reduce((sum, p) => sum + p.tasks.length, 0); }
+function phaseCheckedCount(phase) { return phase.tasks.filter(t => checkedState[t.id]).length; }
+function isPhaseComplete(phase) { return phaseCheckedCount(phase) === phase.tasks.length; }
+
+function render() {
+  const total = totalTasks();
+  const done = Object.values(checkedState).filter(Boolean).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+
+  document.getElementById('gaugePct').textContent = pct + '%';
+  document.getElementById('statDone').textContent = done + ' / ' + total;
+
+  const circumference = 326.7;
+  document.getElementById('gaugeFill').style.strokeDashoffset = circumference * (1 - pct / 100);
+
+  const phasesComplete = PHASES.filter(isPhaseComplete).length;
+  document.getElementById('statPhases').textContent = phasesComplete + ' / ' + PHASES.length;
+
+  const currentPhase = PHASES.find(p => !isPhaseComplete(p));
+  document.getElementById('statCurrent').textContent = currentPhase ? (currentPhase.number + ' · ' + currentPhase.title) : 'All verified ✓';
+
+  const container = document.getElementById('phaseContainer');
+  container.innerHTML = '';
+  PHASES.forEach(phase => {
+    const complete = isPhaseComplete(phase);
+    const section = document.createElement('div');
+    section.className = 'phase' + (complete ? ' complete' : '');
+
+    const head = document.createElement('div');
+    head.className = 'phase-head';
+    head.innerHTML =
+      '<span class="phase-num">' + phase.number + '</span>' +
+      '<span class="phase-title">' + phase.title + '</span>' +
+      '<span class="phase-sub">' + phase.subtitle + '</span>' +
+      (complete ? '<span class="phase-check">✓</span>' : '') +
+      '<span class="phase-count">' + phaseCheckedCount(phase) + '/' + phase.tasks.length + '</span>';
+    section.appendChild(head);
+
+    const list = document.createElement('div');
+    list.className = 'task-list';
+    phase.tasks.forEach(task => {
+      const isChecked = !!checkedState[task.id];
+      const row = document.createElement('div');
+      row.className = 'task-row';
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('role', 'checkbox');
+      row.setAttribute('aria-checked', String(isChecked));
+
+      const tagClass = task.owner === 'both' ? 'tag-both' : 'tag-' + task.owner;
+      const tagLabel = task.owner === 'both' ? '—' : task.owner;
+
+      row.innerHTML =
+        '<div class="task-check ' + (isChecked ? 'checked' : '') + '"></div>' +
+        '<div class="task-body">' +
+          '<span class="tag ' + tagClass + '">' + tagLabel + '</span>' +
+          '<span class="task-text ' + (isChecked ? 'done' : '') + '">' + task.text + '</span>' +
+        '</div>';
+
+      row.addEventListener('click', () => toggleTask(task.id));
+      row.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTask(task.id); }
+      });
+      list.appendChild(row);
+    });
+    section.appendChild(list);
+    container.appendChild(section);
+  });
+}
+
+function toggleTask(id) {
+  checkedState[id] = !checkedState[id];
+  render();
+  saveState();
+}
+
+async function loadState() {
+  try {
+    const result = await window.storage.get(STORAGE_KEY, true);
+    if (result && result.value) checkedState = JSON.parse(result.value);
+    setSyncStatus('synced');
+  } catch (e) {
+    checkedState = {};
+    setSyncStatus('synced');
+  }
+  render();
+}
+
+async function saveState() {
+  setSyncStatus('saving');
+  try {
+    await window.storage.set(STORAGE_KEY, JSON.stringify(checkedState), true);
+    setSyncStatus('synced');
+  } catch (e) {
+    setSyncStatus('error');
+  }
+}
+
+function setSyncStatus(status) {
+  const dot = document.getElementById('syncDot');
+  const text = document.getElementById('syncText');
+  dot.className = 'sync-dot' + (status === 'saving' ? ' saving' : status === 'error' ? ' error' : '');
+  text.textContent = status === 'saving' ? 'saving…' : status === 'error' ? 'offline' : 'synced';
+}
+
+let resetConfirm = false;
+document.getElementById('resetBtn').addEventListener('click', () => {
+  const btn = document.getElementById('resetBtn');
+  if (!resetConfirm) {
+    resetConfirm = true;
+    btn.textContent = 'Tap to confirm';
+    btn.classList.add('confirm');
+    setTimeout(() => {
+      resetConfirm = false;
+      btn.textContent = 'Reset all';
+      btn.classList.remove('confirm');
+    }, 3000);
+  } else {
+    checkedState = {};
+    render();
+    saveState();
+    resetConfirm = false;
+    btn.textContent = 'Reset all';
+    btn.classList.remove('confirm');
+  }
+});
+
+loadState();
+</script>
+</body>
+</html>
