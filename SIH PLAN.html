@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checkpoint Screening — Build Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #10151B;
+    --panel: #1A2129;
+    --line: #2A333D;
+    --text: #EDEEE9;
+    --muted: #8B95A1;
+    --accent: #4FD8B8;
+    --pending: #E3A23C;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    padding: 32px 24px 80px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  header { margin-bottom: 36px; }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 28px;
+    margin: 0 0 6px;
+    letter-spacing: -0.01em;
+  }
+  .subtitle { color: var(--muted); font-size: 15px; margin: 0; }
+
+  .sync-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--muted);
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .sync-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--pending);
+    display: inline-block;
+    transition: background 0.3s ease;
+  }
+  .sync-dot.live { background: var(--accent); }
+  .sync-dot.offline { background: #C0554B; }
+
+  .overall {
+    margin-top: 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .overall-track {
+    flex: 1;
+    height: 6px;
+    background: var(--line);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .overall-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.4s ease;
+  }
+  .overall-label {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* Phase timeline */
+  .phases {
+    display: flex;
+    gap: 2px;
+    margin: 32px 0 12px;
+    border: 1px solid var(--line);
+  }
+  .phase {
+    flex: 1;
+    padding: 14px 16px;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.2s ease;
+  }
+  .phase:last-child { border-right: none; }
+  .phase:hover { background: #1F2A33; }
+  .phase-num {
+    font-family: 'Space Grotesk', sans-serif;
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .phase-name {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .phase-pct {
+    font-family: 'Space Grotesk', sans-serif;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .phase.selected { background: #1F2A33; }
+  .phase.selected .phase-num { color: var(--accent); }
+  .phase-track {
+    height: 3px;
+    background: var(--line);
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .phase-track-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+  }
+
+  .view-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+  }
+  .view-label {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .view-label span { color: var(--text); }
+  button.all-phases {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    padding: 7px 12px;
+    cursor: pointer;
+  }
+  button.all-phases:hover { border-color: var(--muted); color: var(--text); }
+  button.all-phases.active { border-color: var(--accent); color: var(--accent); }
+
+  .empty-phase {
+    color: var(--muted);
+    font-size: 13px;
+    font-style: italic;
+    padding: 8px 0;
+  }
+
+  /* Role cards */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr; }
+    .phases { flex-direction: column; }
+    .phase { border-right: none; border-bottom: 1px solid var(--line); }
+    .phase:last-child { border-bottom: none; }
+  }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+    padding: 20px 20px 16px;
+    position: relative;
+    transition: border-left-color 0.3s ease;
+  }
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .role {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .role-pct {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .owner {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+
+  ul.tasks { list-style: none; margin: 0; padding: 0; }
+  ul.tasks li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 0;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  ul.tasks li:first-child { border-top: none; }
+
+  input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    margin-top: 2px;
+    border: 1.5px solid var(--muted);
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+  }
+  input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  input[type="checkbox"]:checked::after {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 1px;
+    width: 4px;
+    height: 8px;
+    border: solid #10151B;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  label.task-label {
+    cursor: pointer;
+  }
+  li.done label.task-label {
+    color: var(--muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--line);
+  }
+
+  .reset-row {
+    margin-top: 40px;
+    display: flex;
+    justify-content: flex-end;
+  }
+  button.reset {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  button.reset:hover { border-color: var(--muted); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Checkpoint Screening — Build Tracker</h1>
+    <p class="subtitle">SIH · AI document screening system · 6-person team</p>
+    <div class="sync-row">
+      <span class="sync-dot" id="syncDot"></span>
+      <span id="syncStatus">Connecting…</span>
+    </div>
+    <div class="overall">
+      <div class="overall-track"><div class="overall-fill" id="overallFill"></div></div>
+      <div class="overall-label" id="overallLabel">0 / 0 tasks</div>
+    </div>
+  </header>
+
+  <div class="phases" id="phases"></div>
+
+  <div class="view-row">
+    <div class="view-label">Viewing <span id="viewLabel">Phase 1 — Parallel build</span></div>
+    <button class="all-phases" id="allPhasesBtn">Show all phases</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="reset-row">
+    <button class="reset" id="resetBtn">Reset all progress</button>
+  </div>
+
+</div>
+
+<script>
+const PHASES = [
+  { id: 1, name: "Parallel build" },
+  { id: 2, name: "Integration" },
+  { id: 3, name: "Polish + demo prep" },
+  { id: 4, name: "Buffer / submission" }
+];
+
+const ROLES = [
+  {
+    id: "backend",
+    role: "Backend / Infra",
+    owner: "Programmer 1 (SOHAM)",
+    tasks: [
+      { t: "FastAPI project setup & repo structure", p: 1 },
+      { t: "PostgreSQL schema + migrations", p: 1 },
+      { t: "JWT auth + role-based access (Officer/Supervisor/Admin)", p: 1 },
+      { t: "Wire OCR, validation, tampering, face modules into /scan/full", p: 2 },
+      { t: "Deployment / demo environment ready", p: 3 },
+      { t: "Final bug fixes & stability pass", p: 4 }
+    ]
+  },
+  {
+    id: "ocr",
+    role: "OCR + Validation",
+    owner: "Programmer 2 (DHRUBAJOYTI)",
+    tasks: [
+      { t: "Integrate PaddleOCR / Tesseract", p: 1 },
+      { t: "MRZ parsing for passports", p: 1 },
+      { t: "ICAO 9303 check-digit validation", p: 1 },
+      { t: "Field-level validation rules per document type", p: 1 },
+      { t: "Test against sample document set", p: 2 },
+      { t: "Handle edge cases (poor scans, multiple doc types)", p: 3 },
+      { t: "Freeze module — no new changes", p: 4 }
+    ]
+  },
+  {
+    id: "tampering",
+    role: "Tampering Detection",
+    owner: "Programmer 3 (HRISHI)",
+    tasks: [
+      { t: "Error Level Analysis (ELA) implementation", p: 1 },
+      { t: "Metadata / EXIF consistency checks", p: 1 },
+      { t: "CNN forgery classifier", p: 1 },
+      { t: "Tune tampering-score thresholds", p: 2 },
+      { t: "Test against tampered-document dataset", p: 2 },
+      { t: "Reduce false-positive rate", p: 3 },
+      { t: "Freeze module — no new changes", p: 4 }
+    ]
+  },
+  {
+    id: "face",
+    role: "Face Verification + Identity",
+    owner: "Programmer 4 (NIBEJIT)",
+    tasks: [
+      { t: "Face embedding model integration", p: 1 },
+      { t: "Doc-vs-live face matching", p: 1 },
+      { t: "pgvector similarity search setup", p: 1 },
+      { t: "Watchlist / duplicate-identity logic", p: 2 },
+      { t: "Test impersonation-flag accuracy", p: 2 },
+      { t: "Latency optimization for live demo", p: 3 },
+      { t: "Freeze module — no new changes", p: 4 }
+    ]
+  },
+  {
+    id: "research",
+    role: "Research",
+    owner: "Research lead (SAHIL)",
+    tasks: [
+      { t: "Source sample ID / passport datasets", p: 1 },
+      { t: "Source tampered-document dataset", p: 1 },
+      { t: "Benchmark OCR / tampering / face model options", p: 1 },
+      { t: "Write solution-justification doc", p: 2 },
+      { t: "Prep judge Q&A talking points", p: 3 },
+      { t: "Support live Q&A rehearsal with team", p: 4 }
+    ]
+  },
+  {
+    id: "ppt",
+    role: "Presentation",
+    owner: "PPT lead (TRISHA)",
+    tasks: [
+      { t: "Draft problem + solution slides", p: 1 },
+      { t: "Collect live demo screenshots", p: 2 },
+      { t: "Write pitch narrative", p: 2 },
+      { t: "Script the live-demo flow", p: 3 },
+      { t: "Rehearse full run-through with team", p: 4 }
+    ]
+  }
+];
+
+// ─────────────────────────────────────────────────────────────
+// FIREBASE SETUP — do this once before sharing the file with your team:
+// 1. console.firebase.google.com → create a project (free Spark plan is enough)
+// 2. Build → Realtime Database → Create Database → start in test mode
+// 3. Copy the database URL shown at the top (looks like
+//    https://YOUR-PROJECT-default-rtdb.firebaseio.com or a region-prefixed one)
+// 4. Paste it below, replacing YOUR-PROJECT-default-rtdb.firebaseio.com
+// 5. In Realtime Database → Rules, set (fine for a short hackathon, but it
+//    means anyone with the URL can read/write — do NOT reuse this project
+//    for anything sensitive):
+//      { "rules": { ".read": true, ".write": true } }
+// ─────────────────────────────────────────────────────────────
+const FIREBASE_URL = "https://tracker-f4f80-default-rtdb.firebaseio.com/checkpoint-tracker.json";
+
+const STORAGE_KEY = "checkpoint-tracker-state"; // used only for local fallback
+const POLL_MS = 4000;
+let storageMode = "connecting"; // "live" | "offline" | "unconfigured"
+
+function isConfigured() {
+  return !FIREBASE_URL.includes("YOUR-PROJECT");
+}
+
+function setSyncStatus(mode) {
+  storageMode = mode;
+  const dot = document.getElementById("syncDot");
+  const label = document.getElementById("syncStatus");
+  dot.className = "sync-dot" + (mode === "live" ? " live" : mode === "offline" || mode === "unconfigured" ? " offline" : "");
+  label.textContent = mode === "live"
+    ? "Synced across team"
+    : mode === "unconfigured"
+    ? "Firebase URL not set — edit FIREBASE_URL in the file"
+    : mode === "offline"
+    ? "Offline — this device only (check Firebase URL/rules)"
+    : "Connecting…";
+}
+
+async function loadState() {
+  if (!isConfigured()) {
+    setSyncStatus("unconfigured");
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e) { return {}; }
+  }
+  try {
+    const res = await fetch(FIREBASE_URL);
+    if (!res.ok) throw new Error("Firebase GET failed: " + res.status);
+    const data = await res.json();
+    setSyncStatus("live");
+    return data || {};
+  } catch (e) {
+    setSyncStatus("offline");
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e2) { return {}; }
+  }
+}
+
+async function saveState(newState) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(newState)); } catch (e) {}
+
+  if (!isConfigured()) {
+    setSyncStatus("unconfigured");
+    return;
+  }
+  try {
+    const res = await fetch(FIREBASE_URL, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newState)
+    });
+    if (!res.ok) throw new Error("Firebase PUT failed: " + res.status);
+    setSyncStatus("live");
+  } catch (e) {
+    setSyncStatus("offline");
+  }
+}
+
+// Poll for teammates' updates and re-render if anything changed
+async function pollForUpdates() {
+  if (!isConfigured()) return;
+  try {
+    const res = await fetch(FIREBASE_URL);
+    if (!res.ok) throw new Error("Firebase GET failed: " + res.status);
+    const remote = (await res.json()) || {};
+    if (JSON.stringify(remote) !== JSON.stringify(state)) {
+      state = remote;
+      render();
+    }
+    setSyncStatus("live");
+  } catch (e) {
+    setSyncStatus("offline");
+  }
+}
+
+let state = {};
+let selectedPhase = 1; // null = "all phases" view
+
+function phaseCompletion(phaseId) {
+  let done = 0, total = 0;
+  ROLES.forEach(r => {
+    r.tasks.forEach((task, i) => {
+      if (task.p === phaseId) {
+        total++;
+        if (state[r.id + i]) done++;
+      }
+    });
+  });
+  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+
+function renderPhaseStrip() {
+  const wrap = document.getElementById("phases");
+  wrap.innerHTML = "";
+  PHASES.forEach(ph => {
+    const c = phaseCompletion(ph.id);
+    const el = document.createElement("div");
+    el.className = "phase" + (selectedPhase === ph.id ? " selected" : "");
+    el.innerHTML = `
+      <div class="phase-num">Phase ${ph.id}</div>
+      <div class="phase-name">${ph.name}</div>
+      <div class="phase-pct">${c.done}/${c.total} tasks</div>
+      <div class="phase-track"><div class="phase-track-fill" style="width:${c.pct}%"></div></div>
+    `;
+    el.addEventListener("click", () => {
+      selectedPhase = ph.id;
+      render();
+    });
+    wrap.appendChild(el);
+  });
+}
+
+function render() {
+  renderPhaseStrip();
+
+  const allBtn = document.getElementById("allPhasesBtn");
+  allBtn.classList.toggle("active", selectedPhase === null);
+  document.getElementById("viewLabel").textContent = selectedPhase === null
+    ? "All phases"
+    : `Phase ${selectedPhase} — ${PHASES.find(p => p.id === selectedPhase).name}`;
+
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  let totalDone = 0, totalTasks = 0;
+
+  ROLES.forEach(r => {
+    const visibleTasks = r.tasks
+      .map((task, i) => ({ ...task, i }))
+      .filter(task => selectedPhase === null || task.p === selectedPhase);
+
+    const card = document.createElement("div");
+    card.className = "card";
+
+    const done = visibleTasks.filter(task => state[r.id + task.i]).length;
+    totalDone += done;
+    totalTasks += visibleTasks.length;
+    const pct = visibleTasks.length ? Math.round((done / visibleTasks.length) * 100) : 0;
+    card.style.borderLeftColor = pct === 100 && visibleTasks.length ? "var(--accent)" : (pct > 0 ? "var(--pending)" : "var(--line)");
+
+    const head = document.createElement("div");
+    head.className = "card-head";
+    head.innerHTML = `<span class="role">${r.role}</span><span class="role-pct">${done}/${visibleTasks.length}</span>`;
+    card.appendChild(head);
+
+    const owner = document.createElement("div");
+    owner.className = "owner";
+    owner.textContent = r.owner;
+    card.appendChild(owner);
+
+    if (visibleTasks.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "empty-phase";
+      empty.textContent = "No tasks in this phase";
+      card.appendChild(empty);
+    } else {
+      const ul = document.createElement("ul");
+      ul.className = "tasks";
+      visibleTasks.forEach(task => {
+        const key = r.id + task.i;
+        const li = document.createElement("li");
+        if (state[key]) li.classList.add("done");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!state[key];
+        cb.id = key;
+        cb.addEventListener("change", async () => {
+          state[key] = cb.checked;
+          await saveState(state);
+          render();
+        });
+        const label = document.createElement("label");
+        label.className = "task-label";
+        label.htmlFor = key;
+        label.textContent = task.t;
+        li.appendChild(cb);
+        li.appendChild(label);
+        ul.appendChild(li);
+      });
+      card.appendChild(ul);
+    }
+    grid.appendChild(card);
+  });
+
+  const overallPct = totalTasks ? Math.round((totalDone / totalTasks) * 100) : 0;
+  document.getElementById("overallFill").style.width = overallPct + "%";
+  document.getElementById("overallLabel").textContent = `${totalDone} / ${totalTasks} tasks · ${overallPct}%`;
+}
+
+document.getElementById("allPhasesBtn").addEventListener("click", () => {
+  selectedPhase = null;
+  render();
+});
+
+document.getElementById("resetBtn").addEventListener("click", async () => {
+  if (confirm("Reset all checklist progress for the whole team?")) {
+    state = {};
+    await saveState(state);
+    render();
+  }
+});
+
+async function init() {
+  state = await loadState();
+  render();
+  setInterval(pollForUpdates, POLL_MS);
+}
+
+init();
+</script>
+</body>
+</html>
