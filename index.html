@@ -367,33 +367,80 @@ function toggleTask(id) {
   saveState();
 }
 
-async function loadState() {
+// Persistence: prefer the host-provided window.storage API when present, and
+// fall back to localStorage so progress still survives reloads in any browser.
+const hasHostStorage =
+  typeof window.storage !== 'undefined' &&
+  typeof window.storage.get === 'function' &&
+  typeof window.storage.set === 'function';
+
+function readLocalState() {
   try {
-    const result = await window.storage.get(STORAGE_KEY, true);
-    if (result && result.value) checkedState = JSON.parse(result.value);
-    setSyncStatus('synced');
+    const raw = localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? parsed : null;
   } catch (e) {
-    checkedState = {};
-    setSyncStatus('synced');
+    return null;
   }
+}
+
+function writeLocalState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(checkedState));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function loadState() {
+  let loaded = false;
+  let hostFailed = false;
+  if (hasHostStorage) {
+    try {
+      const result = await window.storage.get(STORAGE_KEY, true);
+      if (result && result.value) {
+        const parsed = JSON.parse(result.value);
+        if (parsed && typeof parsed === 'object') {
+          checkedState = parsed;
+          loaded = true;
+        }
+      }
+    } catch (e) {
+      hostFailed = true;
+    }
+  }
+  if (!loaded) checkedState = readLocalState() || {};
+  setSyncStatus(hasHostStorage ? (hostFailed ? 'error' : 'synced') : 'local');
   render();
 }
 
 async function saveState() {
   setSyncStatus('saving');
-  try {
-    await window.storage.set(STORAGE_KEY, JSON.stringify(checkedState), true);
-    setSyncStatus('synced');
-  } catch (e) {
-    setSyncStatus('error');
+  let hostOk = true;
+  if (hasHostStorage) {
+    try {
+      await window.storage.set(STORAGE_KEY, JSON.stringify(checkedState), true);
+    } catch (e) {
+      hostOk = false;
+    }
   }
+  // Always mirror to localStorage too, so the fallback path stays current.
+  const localOk = writeLocalState();
+  if (hasHostStorage && hostOk) setSyncStatus('synced');
+  else if (localOk) setSyncStatus('local');
+  else setSyncStatus('error');
 }
 
 function setSyncStatus(status) {
   const dot = document.getElementById('syncDot');
   const text = document.getElementById('syncText');
   dot.className = 'sync-dot' + (status === 'saving' ? ' saving' : status === 'error' ? ' error' : '');
-  text.textContent = status === 'saving' ? 'saving…' : status === 'error' ? 'offline' : 'synced';
+  text.textContent =
+    status === 'saving' ? 'saving…' :
+    status === 'error' ? 'offline' :
+    status === 'local' ? 'saved on this device' :
+    'synced';
 }
 
 let resetConfirm = false;
